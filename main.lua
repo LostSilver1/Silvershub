@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Silvers Hub | God Mode",
+   Name = "Silvers Hub | Elite TC2",
    LoadingTitle = "Silvers Hub",
-   LoadingSubtitle = "Ultimate Mobile Edition",
+   LoadingSubtitle = "Projectile & Stealth Tech",
    ConfigurationSaving = { Enabled = false }
 })
 
@@ -12,133 +12,109 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
-getgenv().AimbotEnabled = false
 getgenv().SilentAim = false
-getgenv().ESPEnabled = false
-getgenv().ReachEnabled = false
-getgenv().InfAmmo = false
-getgenv().Bhop = false
+getgenv().ProjectilePrediction = false
 getgenv().AutoBackstab = false
+getgenv().InfAmmo = false
+getgenv().Reach = false
+getgenv().ReachSize = 12
 
 -- // Tabs
 local CombatTab = Window:CreateTab("Combat", 4483362458)
-local MovementTab = Window:CreateTab("Movement", 4483362458)
 local VisualsTab = Window:CreateTab("Visuals", 4483362458)
 
 -- // Combat Features
 CombatTab:CreateToggle({
-   Name = "Enable Aimbot (Lock-On)",
-   CurrentValue = false,
-   Callback = function(Value) getgenv().AimbotEnabled = Value end,
-})
-
-CombatTab:CreateToggle({
-   Name = "Silent Aim (Shoot Sky = Hit)",
+   Name = "Silent Aim (Hit Sky = Kill)",
    CurrentValue = false,
    Callback = function(Value) getgenv().SilentAim = Value end,
 })
 
 CombatTab:CreateToggle({
-   Name = "Auto Backstab",
+   Name = "Projectile Prediction (Rockets)",
+   CurrentValue = false,
+   Callback = function(Value) getgenv().ProjectilePrediction = Value end,
+})
+
+CombatTab:CreateToggle({
+   Name = "Force Auto-Backstab",
    CurrentValue = false,
    Callback = function(Value) getgenv().AutoBackstab = Value end,
 })
 
 CombatTab:CreateToggle({
-   Name = "Melee Reach",
-   CurrentValue = false,
-   Callback = function(Value) getgenv().ReachEnabled = Value end,
-})
-
-CombatTab:CreateToggle({
-   Name = "Infinite Ammo",
+   Name = "2x Ammo / Inf Clip",
    CurrentValue = false,
    Callback = function(Value) getgenv().InfAmmo = Value end,
 })
 
--- // Movement Features
-MovementTab:CreateToggle({
-   Name = "B-Hop (Auto-Jump)",
-   CurrentValue = false,
-   Callback = function(Value) getgenv().Bhop = Value end,
-})
-
--- // Visuals Features
-VisualsTab:CreateToggle({
-   Name = "Enable ESP",
-   CurrentValue = false,
-   Callback = function(Value) getgenv().ESPEnabled = Value end,
-})
-
 -- // Logic: Get Target
-local function GetClosest()
-    local Target = nil
-    local Dist = 500
+local function GetTarget()
+    local Closest = nil
+    local Dist = 1000
     for _, v in pairs(Players:GetPlayers()) do
         if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
             if v.Team ~= LocalPlayer.Team and v.Character.Humanoid.Health > 0 then
                 local Pos, OnScreen = Camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
                 local ScreenDist = (Vector2.new(Pos.X, Pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
                 if ScreenDist < Dist then
-                    Target = v
+                    Closest = v
                     Dist = ScreenDist
                 end
             end
         end
     end
-    return Target
+    return Closest
 end
 
--- // Logic: Silent Aim (The "Shoot Anywhere" Hack)
+-- // Logic: Projectile Prediction Math
+local function PredictPos(target)
+    local Velocity = target.Character.HumanoidRootPart.Velocity
+    local Distance = (target.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+    local Time = Distance / 150 -- 150 is avg rocket speed, adjust if needed
+    return target.Character.HumanoidRootPart.Position + (Velocity * Time)
+end
+
+-- // Logic: Silent Aim Hook
 local OldNamecall
-OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
+OldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local Args = {...}
     local Method = getnamecallmethod()
     
     if getgenv().SilentAim and Method == "FindPartOnRayWithIgnoreList" then
-        local Target = GetClosest()
+        local Target = GetTarget()
         if Target then
-            -- Redirects the ray to the target's head
-            Args[1] = Ray.new(Camera.CFrame.Position, (Target.Character.Head.Position - Camera.CFrame.Position).Unit * 1000)
-            return OldNamecall(Self, unpack(Args))
+            local AimPos = getgenv().ProjectilePrediction and PredictPos(Target) or Target.Character.Head.Position
+            Args[1] = Ray.new(Camera.CFrame.Position, (AimPos - Camera.CFrame.Position).Unit * 1000)
+            return OldNamecall(self, unpack(Args))
         end
     end
-    return OldNamecall(Self, ...)
+    return OldNamecall(self, ...)
 end)
 
--- // Main Loops
-RunService.RenderStepped:Connect(function()
-    local Target = GetClosest()
+-- // Main Combat Loop
+RunService.Heartbeat:Connect(function()
+    local Target = GetTarget()
+    if not Target then return end
     
-    -- Aimbot (Lock-on)
-    if getgenv().AimbotEnabled and Target then
-        Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Target.Character.HumanoidRootPart.Position), 0.1)
-    end
-    
-    -- B-Hop
-    if getgenv().Bhop and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        if LocalPlayer.Character.Humanoid.FloorMaterial ~= Enum.Material.Air then
-            LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-    
-    -- Auto Backstab (Agent)
-    if getgenv().AutoBackstab and Target then
+    -- Auto Backstab (Forced position)
+    if getgenv().AutoBackstab then
         local Dist = (Target.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-        if Dist < 15 and LocalPlayer.Character:FindFirstChildOfClass("Tool") then
-            -- Moves you instantly behind them
+        local Tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        -- Only triggers if holding a Melee weapon and close
+        if Tool and Dist < 15 and (Tool.Name:lower():find("knife") or Tool.Name:lower():find("sword")) then
             LocalPlayer.Character.HumanoidRootPart.CFrame = Target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(LocalPlayer.Character.HumanoidRootPart.Position, Target.Character.HumanoidRootPart.Position)
         end
     end
     
-    -- Inf Ammo Loop
+    -- Inf Ammo (TC2 Specific)
     if getgenv().InfAmmo then
         local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool and (tool:FindFirstChild("Ammo") or tool:FindFirstChild("Clip")) then
-            if tool:FindFirstChild("Ammo") then tool.Ammo.Value = 999 end
-            if tool:FindFirstChild("Clip") then tool.Clip.Value = 999 end
+        if tool then
+            local ammo = tool:FindFirstChild("Ammo") or tool:FindFirstChild("Clip")
+            if ammo then ammo.Value = 200 end -- Set to 200 for "2x" feel/stability
         end
     end
 end)
