@@ -1,18 +1,37 @@
-local function getClosest()
-    local target = nil
-    local dist = math.huge
-    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
-        if v ~= game:GetService("Players").LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            -- Distance check logic
-            local screenPos, visible = workspace.CurrentCamera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
-            if visible then
-                local mag = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(workspace.CurrentCamera.ViewportSize.X/2, workspace.CurrentCamera.ViewportSize.Y/2)).Magnitude
-                if mag < dist and mag < 200 then -- 200 is your FOV size
-                    dist = mag
-                    target = v
+-- SILVERS HUB: UNIVERSAL CORE
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- This function "finds" the enemy even if they don't have a standard Head
+local function getTarget()
+    local closest = nil
+    local dist = 250 -- Your FOV Radius
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            -- Arsenal/TC2 often use "HumanoidRootPart" for the body center
+            local root = p.Character:FindFirstChild("HumanoidRootPart") or p.Character:FindFirstChild("Head")
+            if root then
+                local pos, visible = Camera:WorldToViewportPoint(root.Position)
+                if visible then
+                    local mouseDist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                    if mouseDist < dist then
+                        dist = mouseDist
+                        closest = root
+                    end
                 end
             end
         end
     end
-    return target
+    return closest
 end
+
+-- The "Easy Hit" Loop
+game:GetService("RunService").RenderStepped:Connect(function()
+    local target = getTarget()
+    if target then
+        -- Smoothing makes it look natural for your school demo
+        Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, target.Position), 0.15)
+    end
+end)
