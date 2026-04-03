@@ -35,3 +35,8 @@ game:GetService("RunService").RenderStepped:Connect(function()
         Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, target.Position), 0.15)
     end
 end)
+
+game.StarterGui:SetCore("ChatMakeSystemMessage", {
+    Text = "Executor is working! Checking link next...";
+    Color = Color3.fromRGB(0, 255, 0);
+})
