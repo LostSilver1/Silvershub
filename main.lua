@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Silvers Hub | Mobile Edition",
+   Name = "Silvers Hub | TC2 & Universal",
    LoadingTitle = "Silvers Hub",
-   LoadingSubtitle = "Universal Mobile Script",
+   LoadingSubtitle = "Mobile Combat Suite",
    ConfigurationSaving = { Enabled = false }
 })
 
@@ -14,122 +14,95 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 getgenv().Aimbot = false
-getgenv().ESP = false
-getgenv().TeamCheck = true
-getgenv().AimPart = "HumanoidRootPart"
-getgenv().Smoothing = 0.05
-getgenv().FOVRadius = 150
-getgenv().ShowFOV = false
-
--- // FOV Circle Setup
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1
-FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-FOVCircle.Filled = false
-FOVCircle.Visible = false
+getgenv().TeleStab = false -- Agent Teleport
+getgenv().InfAmmo = false  -- Fast Auto-Reload
+getgenv().Reach = false
+getgenv().ReachSize = 15
 
 -- // Tabs
-local MainTab = Window:CreateTab("Main", 4483362458) 
-local VisualsTab = Window:CreateTab("Visuals", 4483362458)
+local CombatTab = Window:CreateTab("Combat", 4483362458)
+local TC2Tab = Window:CreateTab("TC2 Specials", 4483362458)
 
--- // Main Features
-MainTab:CreateToggle({
+-- // Combat Features
+CombatTab:CreateToggle({
    Name = "Enable Aimbot",
    CurrentValue = false,
    Callback = function(Value) getgenv().Aimbot = Value end,
 })
 
-MainTab:CreateSlider({
-   Name = "Aimbot Smoothing",
-   Range = {0.01, 0.5},
-   Increment = 0.01,
-   CurrentValue = 0.05,
-   Callback = function(Value) getgenv().Smoothing = Value end,
-})
-
-MainTab:CreateDropdown({
-   Name = "Aim Part",
-   Options = {"HumanoidRootPart", "Head"},
-   CurrentOption = {"HumanoidRootPart"},
-   Callback = function(Option) getgenv().AimPart = Option[1] end,
-})
-
--- // Visual Features
-VisualsTab:CreateToggle({
-   Name = "Enable Box ESP",
+CombatTab:CreateToggle({
+   Name = "Melee Reach",
    CurrentValue = false,
-   Callback = function(Value) getgenv().ESP = Value end,
+   Callback = function(Value) getgenv().Reach = Value end,
 })
 
-VisualsTab:CreateToggle({
-   Name = "Show FOV Circle",
+-- // TC2 Specifics
+TC2Tab:CreateToggle({
+   Name = "Agent Tele-Stab",
    CurrentValue = false,
-   Callback = function(Value) 
-       getgenv().ShowFOV = Value 
-       FOVCircle.Visible = Value
-   end,
+   Callback = function(Value) getgenv().TeleStab = Value end,
 })
 
-VisualsTab:CreateSlider({
-   Name = "FOV Radius",
-   Range = {50, 500},
-   Increment = 10,
-   CurrentValue = 150,
-   Callback = function(Value) getgenv().FOVRadius = Value end,
+TC2Tab:CreateToggle({
+   Name = "Infinite Ammo (Auto-Refill)",
+   CurrentValue = false,
+   Callback = function(Value) getgenv().InfAmmo = Value end,
 })
 
--- // Logic Functions
-local function GetClosest()
+-- // Logic: Tele-Stab (Agent)
+-- This waits for you to click while holding a knife, then teleports you behind the nearest enemy
+local function DoTeleStab()
+    if not getgenv().TeleStab then return end
     local Target = nil
-    local Dist = getgenv().FOVRadius
+    local Dist = 20 -- Max teleport range
+    
     for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild(getgenv().AimPart) then
-            if getgenv().TeamCheck and v.Team == LocalPlayer.Team then continue end
-            local Pos, OnScreen = Camera:WorldToViewportPoint(v.Character[getgenv().AimPart].Position)
-            local ScreenDist = (Vector2.new(Pos.X, Pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
-            if OnScreen and ScreenDist < Dist then
-                Target = v
-                Dist = ScreenDist
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            if v.Team ~= LocalPlayer.Team then
+                local d = (v.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if d < Dist then
+                    Target = v
+                    break
+                end
             end
         end
     end
-    return Target
+    
+    if Target then
+        -- Teleport 3 studs behind the target
+        LocalPlayer.Character.HumanoidRootPart.CFrame = Target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+    end
 end
 
--- // ESP Simple Highlight
-local function ApplyESP(player)
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "SilversESP"
-    highlight.FillTransparency = 0.5
-    highlight.OutlineTransparency = 0
-    
-    local function update()
-        if getgenv().ESP and player.Character and player ~= LocalPlayer then
-            if getgenv().TeamCheck and player.Team == LocalPlayer.Team then
-                highlight.Parent = nil
-            else
-                highlight.Parent = player.Character
-            end
-        else
-            highlight.Parent = nil
+-- Hook into Mouse/Touch for TeleStab
+game:GetService("UserInputService").InputBegan:Connect(function(input, processed)
+    if not processed and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if getgenv().TeleStab and LocalPlayer.Character:FindFirstChildOfClass("Tool"):FindFirstChild("Knife") then
+            DoTeleStab()
         end
     end
-    RunService.RenderStepped:Connect(update)
-end
+end)
 
-for _, p in pairs(Players:GetPlayers()) do ApplyESP(p) end
-Players.PlayerAdded:Connect(ApplyESP)
+-- // Logic: Infinite Ammo Loop
+RunService.Heartbeat:Connect(function()
+    if getgenv().InfAmmo then
+        local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool and tool:FindFirstChild("Ammo") then
+            -- This tries to keep your current clip full
+            tool.Ammo.Value = 100 
+        end
+    end
+end)
 
--- // Main Loop
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-    FOVCircle.Radius = getgenv().FOVRadius
-    
-    if getgenv().Aimbot then
-        local Target = GetClosest()
-        if Target then
-            local TargetPos = Target.Character[getgenv().AimPart].Position
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, TargetPos), getgenv().Smoothing)
+-- // Logic: Melee Reach
+RunService.Stepped:Connect(function()
+    if getgenv().Reach then
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                if v.Team ~= LocalPlayer.Team then
+                    v.Character.HumanoidRootPart.Size = Vector3.new(getgenv().ReachSize, getgenv().ReachSize, getgenv().ReachSize)
+                end
+            end
         end
     end
 end)
