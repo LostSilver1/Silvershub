@@ -1,71 +1,135 @@
--- Silvers Hub | MOBILE ONLY Version
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Silvers Hub | Mobile Edition",
+   LoadingTitle = "Silvers Hub",
+   LoadingSubtitle = "Universal Mobile Script",
+   ConfigurationSaving = { Enabled = false }
+})
+
+-- // Variables
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- // Settings
-local Settings = {
-    Enabled = true,
-    TeamCheck = true,
-    AimPart = "HumanoidRootPart",
-    FOV = 150,
-    Smoothness = 0.1 -- Adjust for "sticky" feel (0.01 to 0.5)
-}
+getgenv().Aimbot = false
+getgenv().ESP = false
+getgenv().TeamCheck = true
+getgenv().AimPart = "HumanoidRootPart"
+getgenv().Smoothing = 0.05
+getgenv().FOVRadius = 150
+getgenv().ShowFOV = false
 
--- // Create a Simple Mobile Toggle Button
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-local Toggle = Instance.new("TextButton", ScreenGui)
-Toggle.Size = UDim2.new(0, 100, 0, 50)
-Toggle.Position = UDim2.new(0, 10, 0.5, 0)
-Toggle.Text = "Silvers Hub: ON"
-Toggle.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-
-Toggle.MouseButton1Click:Connect(function()
-    Settings.Enabled = not Settings.Enabled
-    Toggle.Text = Settings.Enabled and "Silvers Hub: ON" or "Silvers Hub: OFF"
-    Toggle.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
-end)
-
--- // FOV Circle for Mobile
+-- // FOV Circle Setup
 local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 2
+FOVCircle.Thickness = 1
 FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-FOVCircle.Transparency = 0.7
-FOVCircle.Visible = true
-FOVCircle.Radius = Settings.FOV
+FOVCircle.Filled = false
+FOVCircle.Visible = false
 
-local function GetClosestPlayer()
-    local Closest = nil
-    local ShortestDistance = Settings.FOV
+-- // Tabs
+local MainTab = Window:CreateTab("Main", 4483362458) 
+local VisualsTab = Window:CreateTab("Visuals", 4483362458)
 
+-- // Main Features
+MainTab:CreateToggle({
+   Name = "Enable Aimbot",
+   CurrentValue = false,
+   Callback = function(Value) getgenv().Aimbot = Value end,
+})
+
+MainTab:CreateSlider({
+   Name = "Aimbot Smoothing",
+   Range = {0.01, 0.5},
+   Increment = 0.01,
+   CurrentValue = 0.05,
+   Callback = function(Value) getgenv().Smoothing = Value end,
+})
+
+MainTab:CreateDropdown({
+   Name = "Aim Part",
+   Options = {"HumanoidRootPart", "Head"},
+   CurrentOption = {"HumanoidRootPart"},
+   Callback = function(Option) getgenv().AimPart = Option[1] end,
+})
+
+-- // Visual Features
+VisualsTab:CreateToggle({
+   Name = "Enable Box ESP",
+   CurrentValue = false,
+   Callback = function(Value) getgenv().ESP = Value end,
+})
+
+VisualsTab:CreateToggle({
+   Name = "Show FOV Circle",
+   CurrentValue = false,
+   Callback = function(Value) 
+       getgenv().ShowFOV = Value 
+       FOVCircle.Visible = Value
+   end,
+})
+
+VisualsTab:CreateSlider({
+   Name = "FOV Radius",
+   Range = {50, 500},
+   Increment = 10,
+   CurrentValue = 150,
+   Callback = function(Value) getgenv().FOVRadius = Value end,
+})
+
+-- // Logic Functions
+local function GetClosest()
+    local Target = nil
+    local Dist = getgenv().FOVRadius
     for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild(Settings.AimPart) then
-            if Settings.TeamCheck and v.Team == LocalPlayer.Team then continue end
-            if v.Character.Humanoid.Health <= 0 then continue end
-            
-            local Pos, OnScreen = Camera:WorldToViewportPoint(v.Character[Settings.AimPart].Position)
-            local Distance = (Vector2.new(Pos.X, Pos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
-
-            if OnScreen and Distance < ShortestDistance then
-                Closest = v
-                ShortestDistance = Distance
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild(getgenv().AimPart) then
+            if getgenv().TeamCheck and v.Team == LocalPlayer.Team then continue end
+            local Pos, OnScreen = Camera:WorldToViewportPoint(v.Character[getgenv().AimPart].Position)
+            local ScreenDist = (Vector2.new(Pos.X, Pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+            if OnScreen and ScreenDist < Dist then
+                Target = v
+                Dist = ScreenDist
             end
         end
     end
-    return Closest
+    return Target
 end
 
--- // Mobile Camera Loop
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+-- // ESP Simple Highlight
+local function ApplyESP(player)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "SilversESP"
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
     
-    if Settings.Enabled then
-        local Target = GetClosestPlayer()
+    local function update()
+        if getgenv().ESP and player.Character and player ~= LocalPlayer then
+            if getgenv().TeamCheck and player.Team == LocalPlayer.Team then
+                highlight.Parent = nil
+            else
+                highlight.Parent = player.Character
+            end
+        else
+            highlight.Parent = nil
+        end
+    end
+    RunService.RenderStepped:Connect(update)
+end
+
+for _, p in pairs(Players:GetPlayers()) do ApplyESP(p) end
+Players.PlayerAdded:Connect(ApplyESP)
+
+-- // Main Loop
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    FOVCircle.Radius = getgenv().FOVRadius
+    
+    if getgenv().Aimbot then
+        local Target = GetClosest()
         if Target then
-            local TargetPos = Target.Character[Settings.AimPart].Position
-            -- Smoothly rotate camera toward target
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, TargetPos), Settings.Smoothness)
+            local TargetPos = Target.Character[getgenv().AimPart].Position
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, TargetPos), getgenv().Smoothing)
         end
     end
 end)
