@@ -1,33 +1,51 @@
--- Educational Script: Silvers Hub Core (No Menu)
+-- Educational Script: Silvers Hub (ESP + Mobile FPS Boost)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
 
--- Configuration
-local Config = {
-    EspEnabled = true,
-    AimbotEnabled = true,
-    TeamCheck = true,
-    AimPart = "Head",
-    Smoothness = 0.5 -- 0 to 1 scale
-}
+-- 1. FPS BOOST CONFIGURATION (Mobile Optimized)
+local function BoostFPS()
+    -- Disable Heavy Lighting Effects
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.Brightness = 1
+    
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("PostProcessEffect") then
+            effect.Enabled = false
+        end
+    end
 
--- Simple ESP Function
+    -- Downgrade World Textures & Materials
+    local settings = settings().Rendering
+    settings.QualityLevel = 1
+    
+    for _, v in pairs(game:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") or v:IsA("UnionOperation") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v.Transparency = 1
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+            v.Enabled = false
+        end
+    end
+end
+
+-- 2. ESP CONFIGURATION (No Menu)
 local function CreateESP(Player)
     local Highlight = Instance.new("Highlight")
-    Highlight.Name = "EducationalESP"
+    Highlight.Name = "Edu_ESP"
     Highlight.FillTransparency = 0.5
     Highlight.OutlineTransparency = 0
+    Highlight.FillColor = Color3.fromRGB(0, 255, 150) -- Distinct color for visibility
     
     local function Update()
-        if Player.Character and Config.EspEnabled then
-            if Config.TeamCheck and Player.Team == LocalPlayer.Team then
-                Highlight.Parent = nil
-            else
-                Highlight.Parent = Player.Character
-                Highlight.FillColor = Color3.fromRGB(255, 0, 0)
-            end
+        if Player.Character and Player.Parent then
+            -- Optional: Team Check (uncomment if needed)
+            -- if Player.Team == LocalPlayer.Team then Highlight.Parent = nil return end
+            Highlight.Parent = Player.Character
         else
             Highlight.Parent = nil
         end
@@ -36,42 +54,15 @@ local function CreateESP(Player)
     RunService.RenderStepped:Connect(Update)
 end
 
--- Simple Aim-Assist Logic
-local function GetClosestPlayer()
-    local MaximumDistance = math.huge
-    local Target = nil
+-- 3. EXECUTION
+BoostFPS()
 
-    for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild(Config.AimPart) then
-            if Config.TeamCheck and v.Team == LocalPlayer.Team then continue end
-            
-            local ScreenPoint = Camera:WorldToScreenPoint(v.Character[Config.AimPart].Position)
-            local VectorDistance = (Vector2.new(ScreenPoint.X, ScreenPoint.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
-            
-            if VectorDistance < MaximumDistance then
-                Target = v
-                MaximumDistance = VectorDistance
-            end
-        end
-    end
-    return Target
-end
-
--- Execution Loop
-RunService.RenderStepped:Connect(function()
-    if Config.AimbotEnabled then
-        local Target = GetClosestPlayer()
-        if Target and Target.Character then
-            local TargetPos = Target.Character[Config.AimPart].Position
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, TargetPos), Config.Smoothness)
-        end
-    end
-end)
-
--- Initialize for existing and new players
+-- Setup ESP for current and future players
 for _, player in pairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then
         CreateESP(player)
     end
 end
 Players.PlayerAdded:Connect(CreateESP)
+
+print("Silvers Hub: ESP and FPS Boost Loaded.")
