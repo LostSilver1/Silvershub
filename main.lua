@@ -1,103 +1,122 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Project: Silvers Hub (Educational)",
-   LoadingTitle = "Executing Default Configurations...",
+   Name = "Project: Silvers Hub (Final Submission)",
+   LoadingTitle = "Compiling Educational Assets...",
    LoadingSubtitle = "by Sirdiscalot0",
-   ConfigurationSaving = {
-      Enabled = false
-   }
+   ConfigurationSaving = { Enabled = false }
 })
 
 local MainTab = Window:CreateTab("Mechanics", 4483362458)
 
--- All features set to true for the project demo
+-- Configuration Variables (All set to True for Demo)
 local BhopEnabled = true
 local HighlightEnabled = true
 local ReachEnabled = true
+local TrackingEnabled = true
+
 local ReachSize = Vector3.new(15, 15, 15)
+local Smoothness = 0.1 -- For Smooth Tracking
 
---- UI CONTROLS
-MainTab:CreateToggle({
-   Name = "Auto-Jump Logic (Bhop)",
-   CurrentValue = true,
-   Callback = function(Value)
-      BhopEnabled = Value
-   end,
-})
+--- EDUCATIONAL HELPER FUNCTIONS
+local function isRoundLive()
+    local status = game.ReplicatedStorage:FindFirstChild("Status")
+    return status and (status.Value ~= "Waiting for Players" and status.Value ~= "Intermission")
+end
 
-MainTab:CreateToggle({
-   Name = "Team-Based Highlighting (ESP)",
-   CurrentValue = true,
-   Callback = function(Value)
-      HighlightEnabled = Value
-      if not Value then
-         for _, p in pairs(game.Players:GetPlayers()) do
-            if p.Character and p.Character:FindFirstChild("ProjectHighlight") then
-               p.Character.ProjectHighlight:Destroy()
-            end
-         end
-      end
-   end,
-})
+local function isVisible(targetPart)
+    local origin = workspace.CurrentCamera.CFrame.Position
+    local direction = targetPart.Position - origin
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {game.Players.LocalPlayer.Character}
+    params.FilterType = Enum.RaycastFilterType.Exclude
 
-MainTab:CreateToggle({
-   Name = "Extended Interaction (Reach)",
-   CurrentValue = true,
-   Callback = function(Value)
-      ReachEnabled = Value
-   end,
-})
+    local result = workspace:Raycast(origin, direction, params)
+    return result == nil or result.Instance:IsDescendantOf(targetPart.Parent)
+end
 
---- UNIFIED EXECUTION LOOP
-task.spawn(function()
-    while true do
-        local player = game.Players.LocalPlayer
-        local character = player.Character
-        
-        -- Movement and Combat logic
-        if character then
-            if BhopEnabled and character:FindFirstChild("Humanoid") then
-                if character.Humanoid.FloorMaterial ~= Enum.Material.Air then
-                    character.Humanoid.Jump = true
-                end
-            end
-            
-            local tool = character:FindFirstChildOfClass("Tool")
-            if ReachEnabled and tool and tool:FindFirstChild("Handle") then
-                tool.Handle.Size = ReachSize
-                tool.Handle.CanCollide = false
-            elseif tool and tool:FindFirstChild("Handle") then
-                tool.Handle.Size = Vector3.new(1, 1, 1)
-            end
-        end
-        
-        -- Team-Specific Visuals (RED vs GRN)
-        if HighlightEnabled then
-            for _, p in pairs(game.Players:GetPlayers()) do
-                if p ~= player and p.Character and p.Character:FindFirstChild("Humanoid") then
-                    local h = p.Character:FindFirstChild("ProjectHighlight") or Instance.new("Highlight")
-                    h.Name = "ProjectHighlight"
-                    h.Parent = p.Character
-                    
-                    -- Color Logic
-                    if p.TeamColor == BrickColor.new("Bright red") or (p.Team and p.Team.Name == "RED") then
-                        h.FillColor = Color3.fromRGB(255, 0, 0)
-                    elseif p.TeamColor == BrickColor.new("Bright green") or (p.Team and p.Team.Name == "GRN") then
-                        h.FillColor = Color3.fromRGB(0, 255, 0)
-                    else
-                        h.FillColor = Color3.fromRGB(255, 255, 255)
+local function getClosestVisibleEnemy()
+    local closest = nil
+    local dist = 500
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p ~= game.Players.LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            -- Team Check: Don't track teammates
+            if p.Team ~= game.Players.LocalPlayer.Team then
+                if isVisible(p.Character.Head) then
+                    local d = (workspace.CurrentCamera.CFrame.Position - p.Character.Head.Position).Magnitude
+                    if d < dist then
+                        dist = d
+                        closest = p.Character.Head
                     end
                 end
             end
         end
+    end
+    return closest
+end
+
+--- UI CONTROLS
+MainTab:CreateToggle({Name = "Auto-Jump Logic (Bhop)", CurrentValue = true, Callback = function(V) BhopEnabled = V end})
+MainTab:CreateToggle({Name = "Team-Based ESP", CurrentValue = true, Callback = function(V) HighlightEnabled = V end})
+MainTab:CreateToggle({Name = "Fixed Extended Reach", CurrentValue = true, Callback = function(V) ReachEnabled = V end})
+MainTab:CreateToggle({Name = "Smooth Camera Tracking", CurrentValue = true, Callback = function(V) TrackingEnabled = V end})
+
+--- UNIFIED EXECUTION LOOP
+game:GetService("RunService").RenderStepped:Connect(function()
+    if not isRoundLive() then return end
+    
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    
+    if character then
+        -- 1. Bhop Logic
+        if BhopEnabled and character:FindFirstChild("Humanoid") and character.Humanoid.FloorMaterial ~= Enum.Material.Air then
+            character.Humanoid.Jump = true
+        end
         
-        task.wait(0.05)
+        -- 2. FIXED Reach Logic (Recursive Search + Physics Fix)
+        local tool = character:FindFirstChildOfClass("Tool")
+        if ReachEnabled and tool then
+            for _, part in pairs(tool:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Size = ReachSize
+                    part.CanCollide = false
+                    part.Massless = true -- Prevents weight issues
+                end
+            end
+        end
+        
+        -- 3. Smooth Camera Tracking
+        if TrackingEnabled then
+            local target = getClosestVisibleEnemy()
+            if target then
+                local camera = workspace.CurrentCamera
+                local targetCFrame = CFrame.lookAt(camera.CFrame.Position, target.Position)
+                camera.CFrame = camera.CFrame:Lerp(targetCFrame, Smoothness)
+            end
+        end
+    end
+
+    -- 4. Team-Based Visuals (ESP)
+    if HighlightEnabled then
+        for _, p in pairs(game.Players:GetPlayers()) do
+            if p ~= player and p.Character then
+                local h = p.Character:FindFirstChild("ProjectHighlight") or Instance.new("Highlight")
+                h.Name = "ProjectHighlight"
+                h.Parent = p.Character
+                
+                if p.TeamColor == BrickColor.new("Bright red") or (p.Team and p.Team.Name == "RED") then
+                    h.FillColor = Color3.fromRGB(255, 0, 0)
+                else
+                    h.FillColor = Color3.fromRGB(0, 255, 0)
+                end
+            end
+        end
     end
 end)
 
 Rayfield:Notify({
-   Title = "Project: Silvers Hub",
-   Content = "All Educational Mechanics are now TRUE.",
+   Title = "Project Complete",
+   Content = "All logic modules integrated for Silvers Hub.",
    Duration = 5
 })
