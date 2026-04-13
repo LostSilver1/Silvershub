@@ -1,122 +1,176 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Project: Silvers Hub (Final Submission)",
-   LoadingTitle = "Compiling Educational Assets...",
-   LoadingSubtitle = "by Sirdiscalot0",
-   ConfigurationSaving = { Enabled = false }
+    Name = "TC2 Project - Educational Only",
+    LoadingTitle = "TC2 Script",
+    LoadingSubtitle = "by AI Generator",
+    ConfigurationSaving = { Enabled = false }
 })
 
-local MainTab = Window:CreateTab("Mechanics", 4483362458)
+-- Variables
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
 
--- Configuration Variables (All set to True for Demo)
-local BhopEnabled = true
-local HighlightEnabled = true
-local ReachEnabled = true
-local TrackingEnabled = true
+local Settings = {
+    Aimbot = false,
+    SilentAim = false,
+    WallCheck = false,
+    TeamCheck = true,
+    Prediction = false,
+    ESP = false,
+    InfCloak = false,
+    InfCharge = false,
+    PredictionVelocity = 150 -- Average projectile speed
+}
 
-local ReachSize = Vector3.new(15, 15, 15)
-local Smoothness = 0.1 -- For Smooth Tracking
+-- Functions
+local function GetClosestPlayer()
+    local Target = nil
+    local Dist = math.huge
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            if Settings.TeamCheck and v.Team == LocalPlayer.Team then continue end
+            
+            if Settings.WallCheck then
+                local Ray = Ray.new(Camera.CFrame.Position, (v.Character.Head.Position - Camera.CFrame.Position).Unit * 500)
+                local Hit = workspace:FindPartOnRayWithIgnoreList(Ray, {LocalPlayer.Character, v.Character})
+                if Hit then continue end
+            end
 
---- EDUCATIONAL HELPER FUNCTIONS
-local function isRoundLive()
-    local status = game.ReplicatedStorage:FindFirstChild("Status")
-    return status and (status.Value ~= "Waiting for Players" and status.Value ~= "Intermission")
-end
-
-local function isVisible(targetPart)
-    local origin = workspace.CurrentCamera.CFrame.Position
-    local direction = targetPart.Position - origin
-    local params = RaycastParams.new()
-    params.FilterDescendantsInstances = {game.Players.LocalPlayer.Character}
-    params.FilterType = Enum.RaycastFilterType.Exclude
-
-    local result = workspace:Raycast(origin, direction, params)
-    return result == nil or result.Instance:IsDescendantOf(targetPart.Parent)
-end
-
-local function getClosestVisibleEnemy()
-    local closest = nil
-    local dist = 500
-    for _, p in pairs(game.Players:GetPlayers()) do
-        if p ~= game.Players.LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
-            -- Team Check: Don't track teammates
-            if p.Team ~= game.Players.LocalPlayer.Team then
-                if isVisible(p.Character.Head) then
-                    local d = (workspace.CurrentCamera.CFrame.Position - p.Character.Head.Position).Magnitude
-                    if d < dist then
-                        dist = d
-                        closest = p.Character.Head
-                    end
-                end
+            local ScreenPoint = Camera:WorldToScreenPoint(v.Character.Head.Position)
+            local VectorDist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(ScreenPoint.X, ScreenPoint.Y)).Magnitude
+            
+            if VectorDist < Dist then
+                Target = v
+                Dist = VectorDist
             end
         end
     end
-    return closest
+    return Target
 end
 
---- UI CONTROLS
-MainTab:CreateToggle({Name = "Auto-Jump Logic (Bhop)", CurrentValue = true, Callback = function(V) BhopEnabled = V end})
-MainTab:CreateToggle({Name = "Team-Based ESP", CurrentValue = true, Callback = function(V) HighlightEnabled = V end})
-MainTab:CreateToggle({Name = "Fixed Extended Reach", CurrentValue = true, Callback = function(V) ReachEnabled = V end})
-MainTab:CreateToggle({Name = "Smooth Camera Tracking", CurrentValue = true, Callback = function(V) TrackingEnabled = V end})
+-- Tabs
+local CombatTab = Window:CreateTab("Combat")
+local VisualsTab = Window:CreateTab("Visuals")
+local MiscTab = Window:CreateTab("Misc")
 
---- UNIFIED EXECUTION LOOP
-game:GetService("RunService").RenderStepped:Connect(function()
-    if not isRoundLive() then return end
-    
-    local player = game.Players.LocalPlayer
-    local character = player.Character
-    
-    if character then
-        -- 1. Bhop Logic
-        if BhopEnabled and character:FindFirstChild("Humanoid") and character.Humanoid.FloorMaterial ~= Enum.Material.Air then
-            character.Humanoid.Jump = true
-        end
-        
-        -- 2. FIXED Reach Logic (Recursive Search + Physics Fix)
-        local tool = character:FindFirstChildOfClass("Tool")
-        if ReachEnabled and tool then
-            for _, part in pairs(tool:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.Size = ReachSize
-                    part.CanCollide = false
-                    part.Massless = true -- Prevents weight issues
+-- Combat Features
+CombatTab:CreateToggle({
+    Name = "Plain Aimbot (Hard Lock)",
+    CurrentValue = false,
+    Callback = function(Value) Settings.Aimbot = Value end
+})
+
+CombatTab:CreateToggle({
+    Name = "Silent Aim",
+    CurrentValue = false,
+    Callback = function(Value) Settings.SilentAim = Value end
+})
+
+CombatTab:CreateToggle({
+    Name = "Projectile Prediction",
+    CurrentValue = false,
+    Callback = function(Value) Settings.Prediction = Value end
+})
+
+CombatTab:CreateToggle({
+    Name = "Wall Check",
+    CurrentValue = false,
+    Callback = function(Value) Settings.WallCheck = Value end
+})
+
+-- Visuals Features (ESP)
+VisualsTab:CreateToggle({
+    Name = "Team ESP",
+    CurrentValue = false,
+    Callback = function(Value)
+        Settings.ESP = Value
+        while Settings.ESP do
+            for _, v in pairs(Players:GetPlayers()) do
+                if v ~= LocalPlayer and v.Character then
+                    local Highlight = v.Character:FindFirstChild("Highlight") or Instance.new("Highlight", v.Character)
+                    Highlight.FillTransparency = 0.5
+                    Highlight.OutlineTransparency = 0
+                    Highlight.FillColor = (v.Team.Name == "GRN" or v.Team.Name == "Green") and Color3.new(0, 1, 0) or Color3.new(1, 0, 0)
                 end
             end
+            task.wait(1)
         end
-        
-        -- 3. Smooth Camera Tracking
-        if TrackingEnabled then
-            local target = getClosestVisibleEnemy()
-            if target then
-                local camera = workspace.CurrentCamera
-                local targetCFrame = CFrame.lookAt(camera.CFrame.Position, target.Position)
-                camera.CFrame = camera.CFrame:Lerp(targetCFrame, Smoothness)
+        if not Value then
+            for _, v in pairs(Players:GetPlayers()) do
+                if v.Character and v.Character:FindFirstChild("Highlight") then v.Character.Highlight:Destroy() end
             end
         end
     end
+})
 
-    -- 4. Team-Based Visuals (ESP)
-    if HighlightEnabled then
-        for _, p in pairs(game.Players:GetPlayers()) do
-            if p ~= player and p.Character then
-                local h = p.Character:FindFirstChild("ProjectHighlight") or Instance.new("Highlight")
-                h.Name = "ProjectHighlight"
-                h.Parent = p.Character
-                
-                if p.TeamColor == BrickColor.new("Bright red") or (p.Team and p.Team.Name == "RED") then
-                    h.FillColor = Color3.fromRGB(255, 0, 0)
-                else
-                    h.FillColor = Color3.fromRGB(0, 255, 0)
-                end
+-- Misc Features
+MiscTab:CreateToggle({
+    Name = "Infinite Cloak (Agent)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Settings.InfCloak = Value
+        RunService.RenderStepped:Connect(function()
+            if Settings.InfCloak and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("status") then
+                local cloak = LocalPlayer.Character.status:FindFirstChild("Cloak")
+                if cloak then cloak.Value = 100 end
             end
+        end)
+    end
+})
+
+MiscTab:CreateToggle({
+    Name = "Infinite Charge (Annihilator)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Settings.InfCharge = Value
+        RunService.RenderStepped:Connect(function()
+            if Settings.InfCharge and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("status") then
+                local charge = LocalPlayer.Character.status:FindFirstChild("Charge")
+                if charge then charge.Value = 100 end
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "TeleStab (Closest Enemy)",
+    Callback = function()
+        local Target = GetClosestPlayer()
+        if Target and Target.Character and Target.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = Target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+        end
+    end
+})
+
+-- Main Logic Loop
+RunService.RenderStepped:Connect(function()
+    if Settings.Aimbot then
+        local Target = GetClosestPlayer()
+        if Target and Target.Character then
+            local Pos = Target.Character.Head.Position
+            if Settings.Prediction then
+                Pos = Pos + (Target.Character.Head.Velocity * (Pos - Camera.CFrame.Position).Magnitude / Settings.PredictionVelocity)
+            end
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, Pos)
         end
     end
 end)
 
-Rayfield:Notify({
-   Title = "Project Complete",
-   Content = "All logic modules integrated for Silvers Hub.",
-   Duration = 5
-})
+-- Silent Aim Hook
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
+    local Args = {...}
+    local Method = getnamecallmethod()
+    if Settings.SilentAim and Method == "FindPartOnRayWithIgnoreList" then
+        local Target = GetClosestPlayer()
+        if Target and Target.Character then
+            Args[1] = Ray.new(Camera.CFrame.Position, (Target.Character.Head.Position - Camera.CFrame.Position).Unit * 1000)
+            return OldNamecall(Self, unpack(Args))
+        end
+    end
+    return OldNamecall(Self, ...)
+end)
